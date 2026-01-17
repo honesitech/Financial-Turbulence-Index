@@ -81,4 +81,71 @@ with col2:
     elif pct > 75:
         st.warning("⚠️ High Market Stress")
     else:
+
         st.success("✅ Normal Conditions")
+        st.divider()
+st.subheader("🔙 Strategy Backtest")
+st.markdown("What if you exited the market whenever the Percentile Rank was above 90%?")
+
+# 1. Define the strategy: 1 if below 90th percentile, 0 if above (move to cash)
+threshold = fti.quantile(0.90)
+signal = (fti < threshold).astype(int).shift(1) # Shift by 1 to avoid 'look-ahead bias'
+
+# 2. Calculate Returns
+spy_returns = spy.pct_change()
+strategy_returns = spy_returns * signal
+
+# 3. Calculate Cumulative Wealth (starting with $1)
+spy_cum = (1 + spy_returns).cumprod()
+strategy_cum = (1 + strategy_returns).cumprod()
+
+# 4. Plot the comparison
+fig_bt, ax_bt = plt.subplots(figsize=(10, 4))
+ax_bt.plot(spy_cum.index, spy_cum, label="Buy & Hold SPY", alpha=0.7)
+ax_bt.plot(strategy_cum.index, strategy_cum, label="Turbulence-Adjusted Strategy", linewidth=2)
+ax_bt.set_ylabel("Wealth (Starting with $1)")
+ax_bt.legend()
+st.pyplot(fig_bt)
+
+# 5. Show Stats
+col_a, col_b = st.columns(2)
+with col_a:
+    st.write(f"**Final Wealth (SPY):** ${spy_cum.iloc[-1]:.2f}")
+with col_b:
+    st.write(f"**Final Wealth (Strategy):** ${strategy_cum.iloc[-1]:.2f}")
+    st.divider()
+st.subheader("⏱️ Lead Time Analysis")
+
+# 1. Define 'Events': Days where FTI is in the top 10%
+threshold_90 = fti.quantile(0.90)
+spike_dates = fti[fti >= threshold_90].index
+
+# 2. Analyze what happens after each spike
+lead_times = []
+for spike_date in spike_dates:
+    # Look at the next 14 trading days after the spike
+    future_spy = spy_returns.loc[spike_date:].iloc[1:15]
+    
+    # Check for a cumulative drop of 2% or more
+    cum_drop = (1 + future_spy).cumprod() - 1
+    drops = cum_drop[cum_drop <= -0.02]
+    
+    if not drops.empty:
+        # Calculate days until the first 2% drop occurred
+        days_to_drop = (drops.index[0] - spike_date).days
+        lead_times.append(days_to_drop)
+
+# 3. Display Results
+if lead_times:
+    avg_lead = np.mean(lead_times)
+    st.write(f"Across this period, there were **{len(spike_dates)}** high-turbulence events.")
+    st.write(f"In cases followed by a 2% drop, the average lead time was **{avg_lead:.1f} days**.")
+    
+    # Histogram of Lead Times
+    fig_hist, ax_hist = plt.subplots(figsize=(8, 3))
+    ax_hist.hist(lead_times, bins=10, color='skyblue', edgecolor='black')
+    ax_hist.set_title("Distribution of Lead Times (Days to 2% Drop)")
+    ax_hist.set_xlabel("Days")
+    st.pyplot(fig_hist)
+else:
+    st.info("No significant lead-time events found in this lookback period.")
