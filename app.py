@@ -13,7 +13,7 @@ st.title("🛡️ VIX-Filtered Turbulence Dashboard")
 st.sidebar.header("Parameters")
 
 # 1. Flexible Lookback: 0.5 to 20 years in 0.5-year intervals
-years_numeric = np.arange(0.5, 20.5, 0.5)
+years_numeric = np.arange(2, 20.5, 0.5)
 lookback_options = [f"{y} years" for y in years_numeric]
 selected_label = st.sidebar.selectbox("Lookback Period", lookback_options, index=9) # Default 5y
 
@@ -169,6 +169,11 @@ with st.expander("📖 Explanation of Metrics"):
     st.write(f"""
     - **FTI Percentile ({fti_percentile:.1f}%)**: Today is more stressful than **{fti_percentile:.1f}%** of all days in the last {selected_label}.
     - **Threshold (90th Pct)**: We flag the top **10%** of most 'unusual' days as Turbulent.
-    - **VIX Threshold**: High FTI alone isn't enough to exit; the VIX must also confirm market panic.
-    - **Why 4 vs 12?**: A value of 4 means assets are moving normally. A value of 12 (like during COVID-19) means correlations have broken down.
-    """)
+    - **Assetts used to calculate FTI**: 
+Broad US Indices,"SPY, IVV, VOO, QQQ, DIA, IWM"
+Sectors (SPDRs),"XLK, XLF, XLC, XLY, XLP, XLE, XLV, XLI, XLB, XLU"
+Global & Emerging,"VWO, EEM, KWEB"
+Commodities,"GLD, SLV, USO, UNG, GDX, GDXJ"
+Fixed Income,"BND, AGG, LQD, JNK, HYG, TLT, IEI, SHY"
+Thematic & Factors,"SMH, SOXX, ARKK, VGT, VNQ, RWR, IYR, XOP, OIH, KRE, XHB, ITB, IGV, SKYY, FDN, VUG, VTV".)
+
