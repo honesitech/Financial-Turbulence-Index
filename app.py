@@ -353,17 +353,27 @@ with st.expander("📖 Documentation: Understanding the Turbulence Index"):
 
     The FTI monitors systemic stress across these key categories:
 
-    * **Broad US Indices**: SPY, IVV, VOO, QQQ, DIA, IWM
-
-    * **Sectors (SPDRs)**: XLK, XLF, XLC, XLY, XLP, XLE, XLV, XLI, XLB, XLU
-
-    * **Global & Emerging**: VWO, EEM, KWEB
-
-    * **Commodities**: GLD, SLV, USO, UNG, GDX, GDXJ
-
-    * **Fixed Income**: BND, AGG, LQD, JNK, HYG, TLT, IEI, SHY
-
-    * **Thematic & Factors**: SMH, SOXX, ARKK, VGT, VNQ, RWR, IYR, XOP, OIH, KRE, XHB, ITB, IGV, SKYY, FDN, VUG, VTV.
+ # 1. US Core & Styles (Broad Market Exposure)
+    'SPY', 'QQQ', 'IWM', 'VUG', 'VTV', 'DIA', 
+    
+    # 2. US Sectors (Cyclical & Defensive)
+    'XLK', 'XLF', 'XLE', 'XLV', 'XLI', 'XLY', 'XLP', 'XLB', 'XLU', 'XLRE',
+    
+    # 3. Specific Industries (High Sensitivity)
+    'SMH', 'KRE', 'XBI', 'ITA', 'XHB', 'XOP', 'GDX', 'ARKK',
+    
+    # 4. Global & Emerging Markets (Geopolitical Risk)
+    'EFA', 'VWO', 'EWJ', 'EWZ', 'MCHI', 'INDA', 'FXI', 'KWEB',
+    
+    # 5. Fixed Income & Credit (Liquidity Stress)
+    'AGG', 'TLT', 'IEF', 'SHY', 'LQD', 'HYG', 'BNDX', 'EMB', 'TIP', 'JNK',
+    
+    # 6. Commodities & Alternatives (Inflation/Safety)
+    'GLD', 'SLV', 'USO', 'UNG', 'DBA', 'CPER', 'VNQ', 'UUP',
+    
+    # 7. Digital Assets (Modern Systemic Risk)
+    'BTC-USD', 'ETH-USD'
 
     """)
+
 
