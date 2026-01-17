@@ -10,13 +10,23 @@ st.set_page_config(page_title="Adaptive Market Stress Dashboard", layout="wide")
 
 @st.cache_data
 def get_market_data():
-    # 30 Liquid ETFs across all asset classes
+    # Reduced list to ensure higher reliability and faster calculation
     tickers = [
         'SPY', 'QQQ', 'IWM', 'EFA', 'EEM', 'XLK', 'XLF', 'XLV', 'XLY', 'XLP', 
-        'XLI', 'XLU', 'XLE', 'XLB', 'XLRE', 'AGG', 'BND', 'LQD', 'HYG', 'TLT', 
-        'GLD', 'SLV', 'USO', 'DBA', 'UUP', 'VNQ', 'VGT', 'VUG', 'VTV', 'VXUS'
+        'XLI', 'XLU', 'XLE', 'XLB', 'AGG', 'LQD', 'HYG', 'TLT', 
+        'GLD', 'USO', 'UUP', 'VNQ'
     ]
-    data = yf.download(tickers, period="5y")['Adj Close'].dropna()
+    
+    # Updated yfinance logic to avoid the KeyError
+    raw_data = yf.download(tickers, period="5y", group_by='column')
+    
+    # Robustly extract Adj Close
+    if 'Adj Close' in raw_data.columns:
+        data = raw_data['Adj Close'].dropna()
+    else:
+        # Fallback for different yfinance return structures
+        data = raw_data.xs('Adj Close', axis=1, level=0).dropna()
+        
     vix = yf.download('^VIX', period="5y")['Adj Close']
     return data, vix
 
@@ -24,7 +34,7 @@ data, vix = get_market_data()
 
 # --- Sidebar Controls ---
 st.sidebar.header("Strategy Settings")
-window = st.sidebar.slider("Rolling Window (Days)", 60, 504, 252, help="252 days = 1 trading year")
+window = st.sidebar.slider("Rolling Window (Days)", 60, 504, 252)
 vix_threshold = st.sidebar.slider("VIX Fear Threshold", 15, 40, 20)
 fti_quantile = st.sidebar.slider("FTI Sensitivity (Percentile)", 0.80, 0.99, 0.95)
 
@@ -33,22 +43,20 @@ def calculate_rolling_fti(df, window_size):
     returns = df.pct_change().dropna()
     fti_values = []
     
-    # We iterate through the data to compute the rolling Mahalanobis distance
     for i in range(len(returns)):
         if i < window_size:
             fti_values.append(np.nan)
             continue
         
-        # Lookback window for mean and covariance
         window_data = returns.iloc[i-window_size:i]
         mu = window_data.mean()
         try:
-            sigma_inv = np.linalg.inv(window_data.cov().values)
-            # Current day's deviation from the rolling average
+            # Use pseudo-inverse for better stability with rolling windows
+            sigma_inv = np.linalg.pinv(window_data.cov().values)
             diff = returns.iloc[i] - mu
             dist = diff.dot(sigma_inv).dot(diff.T)
             fti_values.append(dist)
-        except: # Handle singular matrices if data is flat
+        except:
             fti_values.append(np.nan)
             
     return pd.Series(fti_values, index=returns.index)
@@ -60,27 +68,40 @@ df = pd.DataFrame({'FTI': fti_series, 'VIX': vix, 'SPY': data['SPY']}).dropna()
 fti_threshold = df['FTI'].quantile(fti_quantile)
 df['Signal'] = (df['FTI'] > fti_threshold) & (df['VIX'] > vix_threshold)
 df['Market_Ret'] = df['SPY'].pct_change()
-# Shift signal by 1 day to prevent 'look-ahead bias'
 df['Strat_Ret'] = np.where(df['Signal'].shift(1), 0, df['Market_Ret'])
+
+# --- Drawdown Calculation ---
+def get_max_drawdown(returns):
+    cum_rets = (1 + returns.fillna(0)).cumprod()
+    peak = cum_rets.cummax()
+    drawdown = (cum_rets - peak) / peak
+    return drawdown
+
+df['Market_DD'] = get_max_drawdown(df['Market_Ret'])
+df['Strat_DD'] = get_max_drawdown(df['Strat_Ret'])
 
 # --- UI Layout ---
 st.title("🛡️ Adaptive Dual-Key Market Stress")
-st.info(f"Currently analyzing structural stress relative to a {window}-day rolling window.")
 
-col1, col2 = st.columns(2)
-with col1:
-    st.subheader("1. Adaptive Structural Stress (FTI)")
-    st.plotly_chart(px.line(df, y='FTI', title=f"Rolling {window}-Day Mahalanobis Distance"), use_container_width=True)
+# Performance Metrics Row
+m_col1, m_col2, m_col3 = st.columns(3)
+with m_col1:
+    total_mkt = (1 + df['Market_Ret']).prod() - 1
+    st.metric("SPY Total Return", f"{total_mkt:.2%}")
+with m_col2:
+    total_strat = (1 + df['Strat_Ret']).prod() - 1
+    st.metric("Strategy Total Return", f"{total_strat:.2%}", delta=f"{(total_strat - total_mkt):.2%}")
+with m_col3:
+    st.metric("Strategy Max Drawdown", f"{df['Strat_DD'].min():.2%}", delta=f"{(df['Strat_DD'].min() - df['Market_DD'].min()):.2%}", delta_color="inverse")
 
-with col2:
-    st.subheader("2. Market Fear (VIX)")
-    fig_vix = px.line(df, y='VIX', title="VIX Index")
-    fig_vix.add_hline(y=vix_threshold, line_dash="dash", line_color="red")
-    st.plotly_chart(fig_vix, use_container_width=True)
+# Charts
+st.subheader("1. Equity Curve & Drawdown")
+fig_perf = go.Figure()
+fig_perf.add_trace(go.Scatter(x=df.index, y=(1+df['Market_Ret']).cumprod(), name="Buy & Hold SPY", line=dict(color='gray', dash='dot')))
+fig_perf.add_trace(go.Scatter(x=df.index, y=(1+df['Strat_Ret']).cumprod(), name="Filtered Strategy", line=dict(color='orange', width=3)))
+st.plotly_chart(fig_perf, use_container_width=True)
 
-# --- Scatter Analysis ---
-st.divider()
-st.subheader("3. Regime Analysis: The Danger Zone")
+st.subheader("2. Regime Analysis: The Danger Zone")
 df['Regime'] = "Normal"
 df.loc[df['FTI'] > fti_threshold, 'Regime'] = "Turbulent (High FTI)"
 df.loc[df['VIX'] > vix_threshold, 'Regime'] = "Fearful (High VIX)"
@@ -90,13 +111,3 @@ fig_scatter = px.scatter(df, x='FTI', y='VIX', color='Regime',
                  color_discrete_map={"Normal": "gray", "Turbulent (High FTI)": "blue", 
                                      "Fearful (High VIX)": "orange", "CRASH WARNING": "red"})
 st.plotly_chart(fig_scatter, use_container_width=True)
-
-# --- Performance Chart ---
-st.subheader("4. Strategy: Adaptive Filter vs. Buy & Hold")
-cum_market = (1 + df['Market_Ret'].fillna(0)).cumprod()
-cum_strat = (1 + df['Strat_Ret'].fillna(0)).cumprod()
-
-fig_perf = go.Figure()
-fig_perf.add_trace(go.Scatter(x=df.index, y=cum_market, name="Buy & Hold SPY", line=dict(color='gray')))
-fig_perf.add_trace(go.Scatter(x=df.index, y=cum_strat, name="Filtered Strategy", line=dict(color='orange', width=2)))
-st.plotly_chart(fig_perf, use_container_width=True)
