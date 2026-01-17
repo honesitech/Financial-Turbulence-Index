@@ -26,7 +26,7 @@ user_window = st.sidebar.slider("FTI Rolling Window (Days)", 60, 500, 252)
 
 # --- Asset Universe ---
 etf_tickers = [
-    'SPY', 'IVV', 'VOO', 'QQQ', 'DIA', 'IWM', 'VWO', 'EEM', 'GLD', 'SLV',
+    'SPY', 'BTC-USD', 'ETH-USD', 'QQQ', 'DIA', 'IWM', 'VWO', 'EEM', 'GLD', 'SLV',
     'USO', 'UNG', 'XLK', 'XLF', 'XLC', 'XLY', 'XLP', 'XLE', 'XLV', 'XLI',
     'XLB', 'XLU', 'SMH', 'SOXX', 'KWEB', 'ARKK', 'VGT', 'VNQ', 'RWR', 'IYR',
     'GDX', 'GDXJ', 'XOP', 'OIH', 'KRE', 'XHB', 'ITB', 'IGV', 'SKYY', 'FDN',
@@ -125,6 +125,7 @@ ax_main.fill_between(fti.index, sp500_index.min(), sp500_index.max(), where=dang
 ax_main.legend(loc='upper left')
 st.pyplot(fig)
 
+
 # --- Documentation ---
 with st.expander("📖 Documentation: Understanding the Strategy"):
     st.write(f"""
@@ -140,3 +141,4 @@ with st.expander("📖 Documentation: Understanding the Strategy"):
     ### 3. Asset Universe (50 ETFs)
     Includes Broad Indices, Sector SPDRs, Commodities, Bonds, and Factor ETFs to ensure a global view of risk.
     """)
+
