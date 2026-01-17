@@ -12,8 +12,8 @@ st.title("🛡️ Mahalanobis Turbulence Dashboard")
 # --- Sidebar Inputs ---
 st.sidebar.header("Parameters")
 
-# 1. Flexible Lookback: 0.5 to 20 years
-years_numeric = np.arange(0.5, 20.5, 0.5)
+# 1. Flexible Lookback: 2 to 20 years
+years_numeric = np.arange(2, 20.5, 0.5)
 lookback_options = [f"{y} years" for y in years_numeric]
 selected_label = st.sidebar.selectbox("Lookback Period", lookback_options, index=9) 
 
@@ -155,3 +155,4 @@ with st.expander("📖 Documentation: Understanding the Turbulence Index"):
     ### 90th Percentile Threshold
     The red shading highlights the top **10%** of most unusual days. When the FTI crosses this line, the strategy moves to cash to protect capital from systemic outliers.
     """)
+
