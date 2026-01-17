@@ -146,7 +146,7 @@ with st.expander("📖 Documentation: Understanding the Turbulence Index"):
     st.write(f"""
    
     ### Mahalanobis Distance (FTI)
-    The FTI uses the **Mahalanobis Distance** to measure the relationship between 50 diverse ETFs is statistically. 
+    The FTI uses the **Mahalanobis Distance** to measure the relationship between 50 diverse ETFs statistically. 
 
     ### 90th Percentile Threshold
     The red shading highlights the top **10%** of most unusual days.
@@ -160,6 +160,7 @@ with st.expander("📖 Documentation: Understanding the Turbulence Index"):
     * **Fixed Income**: BND, AGG, LQD, JNK, HYG, TLT, IEI, SHY
     * **Thematic & Factors**: SMH, SOXX, ARKK, VGT, VNQ, RWR, IYR, XOP, OIH, KRE, XHB, ITB, IGV, SKYY, FDN, VUG, VTV.
     """)
+
 
 
 
