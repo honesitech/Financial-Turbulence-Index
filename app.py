@@ -2,135 +2,101 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-from scipy.spatial.distance import mahalanobis
-import datetime
+import plotly.graph_objects as go
+import plotly.express as px
 
-# --- App Configuration ---
-st.set_page_config(page_title="ETF Turbulence Monitor", layout="wide")
-st.title("📈 Financial Turbulence Index Dashboard")
+# --- Configuration & Data ---
+st.set_page_config(page_title="Adaptive Market Stress Dashboard", layout="wide")
 
-# --- Sidebar Inputs ---
-st.sidebar.header("Parameters")
-window = st.sidebar.slider("Rolling Window (Days)", 60, 500, 252)
-lookback = st.sidebar.selectbox("Lookback Period", ["2y", "5y", "10y"], index=1)
+@st.cache_data
+def get_market_data():
+    # 30 Liquid ETFs across all asset classes
+    tickers = [
+        'SPY', 'QQQ', 'IWM', 'EFA', 'EEM', 'XLK', 'XLF', 'XLV', 'XLY', 'XLP', 
+        'XLI', 'XLU', 'XLE', 'XLB', 'XLRE', 'AGG', 'BND', 'LQD', 'HYG', 'TLT', 
+        'GLD', 'SLV', 'USO', 'DBA', 'UUP', 'VNQ', 'VGT', 'VUG', 'VTV', 'VXUS'
+    ]
+    data = yf.download(tickers, period="5y")['Adj Close'].dropna()
+    vix = yf.download('^VIX', period="5y")['Adj Close']
+    return data, vix
 
-# Your identified 50 ETFs
-etf_tickers = [
-    'SPY', 'IVV', 'VOO', 'QQQ', 'DIA', 'IWM', 'VWO', 'EEM', 'GLD', 'SLV',
-    'USO', 'UNG', 'XLK', 'XLF', 'XLC', 'XLY', 'XLP', 'XLE', 'XLV', 'XLI',
-    'XLB', 'XLU', 'SMH', 'SOXX', 'KWEB', 'ARKK', 'VGT', 'VNQ', 'RWR', 'IYR',
-    'GDX', 'GDXJ', 'XOP', 'OIH', 'KRE', 'XHB', 'ITB', 'IGV', 'SKYY', 'FDN',
-    'VUG', 'VTV', 'BND', 'AGG', 'LQD', 'JNK', 'HYG', 'TLT', 'IEI', 'SHY'
-]
+data, vix = get_market_data()
 
-# --- Data Engine ---
-@st.cache_data(ttl=3600) # Only downloads data once per hour
-def get_data(tickers, period):
-    data = yf.download(tickers, period=period)
-    return data.xs('Close', level=0, axis=1).dropna()
+# --- Sidebar Controls ---
+st.sidebar.header("Strategy Settings")
+window = st.sidebar.slider("Rolling Window (Days)", 60, 504, 252, help="252 days = 1 trading year")
+vix_threshold = st.sidebar.slider("VIX Fear Threshold", 15, 40, 20)
+fti_quantile = st.sidebar.slider("FTI Sensitivity (Percentile)", 0.80, 0.99, 0.95)
 
-with st.spinner("Fetching market data..."):
-    prices = get_data(etf_tickers + ['SPY'], lookback)
-    returns = prices[etf_tickers].pct_change().dropna()
-
-# --- Turbulence Calculation ---
-def run_analysis(ret_df, win):
-    mu = ret_df.rolling(window=win).mean()
-    cov = ret_df.rolling(window=win).cov()
+# --- Adaptive Math Logic (Rolling Mahalanobis) ---
+def calculate_rolling_fti(df, window_size):
+    returns = df.pct_change().dropna()
+    fti_values = []
     
-    results = []
-    valid_dates = ret_df.index[win:]
-    
-    for date in valid_dates:
-        x = ret_df.loc[date].values
-        m = mu.loc[date].values
-        S = cov.loc[date].values
-        # Add small value to diagonal for matrix stability
-        S_inv = np.linalg.inv(S + np.eye(len(etf_tickers)) * 1e-6)
-        results.append(mahalanobis(x, m, S_inv))
+    # We iterate through the data to compute the rolling Mahalanobis distance
+    for i in range(len(returns)):
+        if i < window_size:
+            fti_values.append(np.nan)
+            continue
         
-    return pd.Series(results, index=valid_dates)
+        # Lookback window for mean and covariance
+        window_data = returns.iloc[i-window_size:i]
+        mu = window_data.mean()
+        try:
+            sigma_inv = np.linalg.inv(window_data.cov().values)
+            # Current day's deviation from the rolling average
+            diff = returns.iloc[i] - mu
+            dist = diff.dot(sigma_inv).dot(diff.T)
+            fti_values.append(dist)
+        except: # Handle singular matrices if data is flat
+            fti_values.append(np.nan)
+            
+    return pd.Series(fti_values, index=returns.index)
 
-fti = run_analysis(returns, window)
-spy = prices['SPY'].reindex(fti.index)
+fti_series = calculate_rolling_fti(data, window)
+df = pd.DataFrame({'FTI': fti_series, 'VIX': vix, 'SPY': data['SPY']}).dropna()
+
+# --- Signal & Performance Logic ---
+fti_threshold = df['FTI'].quantile(fti_quantile)
+df['Signal'] = (df['FTI'] > fti_threshold) & (df['VIX'] > vix_threshold)
+df['Market_Ret'] = df['SPY'].pct_change()
+# Shift signal by 1 day to prevent 'look-ahead bias'
+df['Strat_Ret'] = np.where(df['Signal'].shift(1), 0, df['Market_Ret'])
 
 # --- UI Layout ---
-col1, col2 = st.columns([3, 1])
+st.title("🛡️ Adaptive Dual-Key Market Stress")
+st.info(f"Currently analyzing structural stress relative to a {window}-day rolling window.")
 
+col1, col2 = st.columns(2)
 with col1:
-    fig, ax1 = plt.subplots(figsize=(10, 5))
-    ax1.plot(fti.index, fti, color='red', label='Turbulence Index', alpha=0.7)
-    ax1.set_ylabel('Turbulence (Mahalanobis Distance)', color='red')
-    
-    ax2 = ax1.twinx()
-    ax2.plot(spy.index, spy, color='blue', label='S&P 500', alpha=0.5)
-    ax2.set_ylabel('SPY Price', color='blue')
-    
-    plt.title("Turbulence vs. Market Price")
-    st.pyplot(fig)
+    st.subheader("1. Adaptive Structural Stress (FTI)")
+    st.plotly_chart(px.line(df, y='FTI', title=f"Rolling {window}-Day Mahalanobis Distance"), use_container_width=True)
 
 with col2:
-    latest = fti.iloc[-1]
-    pct = (fti < latest).mean() * 100
-    st.metric("Current Turbulence", f"{latest:.2f}")
-    st.metric("Percentile Rank", f"{pct:.1f}%")
-    
-    if pct > 90:
-        st.error("⚠️ CRITICAL TURBULENCE")
-    elif pct > 75:
-        st.warning("⚠️ High Market Stress")
-    else:
+    st.subheader("2. Market Fear (VIX)")
+    fig_vix = px.line(df, y='VIX', title="VIX Index")
+    fig_vix.add_hline(y=vix_threshold, line_dash="dash", line_color="red")
+    st.plotly_chart(fig_vix, use_container_width=True)
 
-        st.success("✅ Normal Conditions")
-      # --- SECTION 1: Strategy Backtest ---
+# --- Scatter Analysis ---
 st.divider()
-st.subheader("🔙 Strategy Backtest")
-st.markdown("Comparison: Buy & Hold SPY vs. Exiting when FTI > 90th Percentile")
+st.subheader("3. Regime Analysis: The Danger Zone")
+df['Regime'] = "Normal"
+df.loc[df['FTI'] > fti_threshold, 'Regime'] = "Turbulent (High FTI)"
+df.loc[df['VIX'] > vix_threshold, 'Regime'] = "Fearful (High VIX)"
+df.loc[df['Signal'], 'Regime'] = "CRASH WARNING"
 
-# Define the strategy: 1 if below 90th percentile, 0 if above (move to cash)
-threshold_90 = fti.quantile(0.90)
-signal = (fti < threshold_90).astype(int).shift(1) 
+fig_scatter = px.scatter(df, x='FTI', y='VIX', color='Regime', 
+                 color_discrete_map={"Normal": "gray", "Turbulent (High FTI)": "blue", 
+                                     "Fearful (High VIX)": "orange", "CRASH WARNING": "red"})
+st.plotly_chart(fig_scatter, use_container_width=True)
 
-# Calculate Returns and Cumulative Wealth
-spy_returns = spy.pct_change()
-strategy_returns = spy_returns * signal
-spy_cum = (1 + spy_returns).cumprod()
-strategy_cum = (1 + strategy_returns).cumprod()
+# --- Performance Chart ---
+st.subheader("4. Strategy: Adaptive Filter vs. Buy & Hold")
+cum_market = (1 + df['Market_Ret'].fillna(0)).cumprod()
+cum_strat = (1 + df['Strat_Ret'].fillna(0)).cumprod()
 
-# Plot Backtest
-fig_bt, ax_bt = plt.subplots(figsize=(10, 4))
-ax_bt.plot(spy_cum.index, spy_cum, label="Buy & Hold SPY", alpha=0.6)
-ax_bt.plot(strategy_cum.index, strategy_cum, label="Turbulence-Adjusted Strategy", linewidth=2, color='green')
-ax_bt.set_ylabel("Wealth ($)")
-ax_bt.legend()
-st.pyplot(fig_bt)
-
-# --- SECTION 2: Lead Time Analyzer ---
-st.divider()
-st.subheader("⏱️ Lead Time Analysis")
-
-# Find every day where FTI spiked
-spike_dates = fti[fti >= threshold_90].index
-lead_times = []
-
-for spike_date in spike_dates:
-    # Look at the next 14 trading days after the spike
-    future_spy = spy_returns.loc[spike_date:].iloc[1:15]
-    cum_drop = (1 + future_spy).cumprod() - 1
-    drops = cum_drop[cum_drop <= -0.02] # Find a 2% drop
-    
-    if not drops.empty:
-        days_to_drop = (drops.index[0] - spike_date).days
-        lead_times.append(days_to_drop)
-
-if lead_times:
-    avg_lead = np.mean(lead_times)
-    st.write(f"The indicator provided an average lead time of **{avg_lead:.1f} days** before a 2% market drop.")
-    
-    fig_hist, ax_hist = plt.subplots(figsize=(8, 3))
-    ax_hist.hist(lead_times, bins=10, color='skyblue', edgecolor='black')
-    ax_hist.set_xlabel("Days until 2% Drop")
-    st.pyplot(fig_hist)
-else:
-    st.info("No 2% market drops followed high-turbulence events in this lookback.")
+fig_perf = go.Figure()
+fig_perf.add_trace(go.Scatter(x=df.index, y=cum_market, name="Buy & Hold SPY", line=dict(color='gray')))
+fig_perf.add_trace(go.Scatter(x=df.index, y=cum_strat, name="Filtered Strategy", line=dict(color='orange', width=2)))
+st.plotly_chart(fig_perf, use_container_width=True)
