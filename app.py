@@ -150,6 +150,16 @@ with st.expander("📖 Documentation: Understanding the Turbulence Index"):
 
     ### 90th Percentile Threshold
     The red shading highlights the top **10%** of most unusual days.
+
+    ### 3. Asset Universe (50 ETFs Used)
+    The FTI monitors systemic stress across these key categories:
+    * **Broad US Indices**: SPY, IVV, VOO, QQQ, DIA, IWM
+    * **Sectors (SPDRs)**: XLK, XLF, XLC, XLY, XLP, XLE, XLV, XLI, XLB, XLU
+    * **Global & Emerging**: VWO, EEM, KWEB
+    * **Commodities**: GLD, SLV, USO, UNG, GDX, GDXJ
+    * **Fixed Income**: BND, AGG, LQD, JNK, HYG, TLT, IEI, SHY
+    * **Thematic & Factors**: SMH, SOXX, ARKK, VGT, VNQ, RWR, IYR, XOP, OIH, KRE, XHB, ITB, IGV, SKYY, FDN, VUG, VTV.
     """)
+
 
 
