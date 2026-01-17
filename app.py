@@ -5,123 +5,119 @@ import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
 
-# --- Configuration ---
-st.set_page_config(page_title="Adaptive Market Stress Dashboard", layout="wide")
+# --- Page Configuration ---
+st.set_page_config(page_title="Market Stress Dashboard", layout="wide")
 
 @st.cache_data
 def get_market_data():
-    # A robust list of major asset classes
-    tickers = [
-        'SPY', 'QQQ', 'IWM', 'EFA', 'EEM', 'XLK', 'XLF', 'XLV', 'XLY', 'XLP', 
-        'XLI', 'XLU', 'XLE', 'XLB', 'AGG', 'LQD', 'HYG', 'TLT', 
-        'GLD', 'USO', 'UUP', 'VNQ'
-    ]
+    # Core list of tickers
+    tickers = ['SPY', 'QQQ', 'IWM', 'EFA', 'EEM', 'XLK', 'XLF', 'XLV', 'XLY', 'XLP', 'GLD', 'TLT']
     
-    # Download data individually to avoid MultiIndex KeyError issues
-    adj_close_data = {}
-    for ticker in tickers:
+    adj_close_dict = {}
+    
+    # Download SPY first to establish a master index
+    spy_data = yf.download('SPY', period="5y", progress=False)
+    if spy_data.empty:
+        st.error("Could not connect to Yahoo Finance. Please refresh.")
+        st.stop()
+        
+    # Standardize SPY series
+    master_index = spy_data.index
+    adj_close_dict['SPY'] = spy_data['Adj Close'] if 'Adj Close' in spy_data.columns else spy_data['Close']
+
+    # Download others and align to master index
+    for t in tickers:
+        if t == 'SPY': continue
         try:
-            tmp = yf.download(ticker, period="5y", progress=False)
+            tmp = yf.download(t, period="5y", progress=False)
             if not tmp.empty:
-                # Force extraction of 'Adj Close' safely
-                if 'Adj Close' in tmp.columns:
-                    adj_close_data[ticker] = tmp['Adj Close']
-                else:
-                    adj_close_data[ticker] = tmp['Close'] # Fallback
-        except Exception:
+                val = tmp['Adj Close'] if 'Adj Close' in tmp.columns else tmp['Close']
+                adj_close_dict[t] = val
+        except:
             continue
-            
-    df_final = pd.DataFrame(adj_close_data).dropna()
+
+    # Build DataFrame safely
+    df_final = pd.DataFrame(adj_close_dict).dropna()
     
-    # Download VIX separately
-    vix = yf.download('^VIX', period="5y", progress=False)
-    vix_series = vix['Adj Close'] if 'Adj Close' in vix.columns else vix['Close']
+    # Get VIX
+    vix_raw = yf.download('^VIX', period="5y", progress=False)
+    vix_series = vix_raw['Adj Close'] if 'Adj Close' in vix_raw.columns else vix_raw['Close']
     
     return df_final, vix_series
 
-data, vix = get_market_data()
+# --- Load Data ---
+try:
+    data, vix = get_market_data()
+except Exception as e:
+    st.error(f"Data Load Error: {e}")
+    st.stop()
 
-# --- Sidebar Controls ---
-st.sidebar.header("Strategy Settings")
-window = st.sidebar.slider("Rolling Window (Days)", 60, 504, 252)
-vix_threshold = st.sidebar.slider("VIX Fear Threshold", 15, 40, 20)
-fti_quantile = st.sidebar.slider("FTI Sensitivity (Percentile)", 0.80, 0.99, 0.95)
+# --- Sidebar ---
+st.sidebar.header("Settings")
+window = st.sidebar.slider("Rolling Window", 60, 504, 252)
+vix_threshold = st.sidebar.slider("VIX Threshold", 15, 40, 20)
+fti_quantile = st.sidebar.slider("FTI Sensitivity", 0.80, 0.99, 0.95)
 
-# --- Adaptive Math Logic (Rolling Mahalanobis) ---
-def calculate_rolling_fti(df, window_size):
-    returns = df.pct_change().dropna()
-    fti_values = []
+# --- Logic: Rolling Mahalanobis (FTI) ---
+def calculate_fti(df, window_size):
+    rets = df.pct_change().dropna()
+    fti_vals = []
     
-    # Pre-calculate values for speed
-    for i in range(len(returns)):
+    for i in range(len(rets)):
         if i < window_size:
-            fti_values.append(np.nan)
+            fti_vals.append(np.nan)
             continue
         
-        window_data = returns.iloc[i-window_size:i]
-        mu = window_data.mean()
+        subset = rets.iloc[i-window_size:i]
+        mu = subset.mean()
         try:
-            # pinv (Pseudo-inverse) is more stable for rolling matrix math
-            sigma_inv = np.linalg.pinv(window_data.cov().values)
-            diff = returns.iloc[i] - mu
-            dist = diff.dot(sigma_inv).dot(diff.T)
-            fti_values.append(dist)
+            # Use pseudo-inverse for maximum stability
+            inv_cov = np.linalg.pinv(subset.cov().values)
+            diff = rets.iloc[i] - mu
+            dist = diff.dot(inv_cov).dot(diff.T)
+            fti_vals.append(dist)
         except:
-            fti_values.append(np.nan)
+            fti_vals.append(np.nan)
             
-    return pd.Series(fti_values, index=returns.index)
+    return pd.Series(fti_vals, index=rets.index)
 
-fti_series = calculate_rolling_fti(data, window)
-# Align all dataframes
-common_index = data.index.intersection(fti_series.dropna().index).intersection(vix.index)
-df = pd.DataFrame({
-    'FTI': fti_series, 
-    'VIX': vix, 
-    'SPY': data['SPY']
-}, index=common_index).dropna()
+fti_series = calculate_fti(data, window)
 
-# --- Signal & Drawdown Logic ---
-fti_threshold = df['FTI'].quantile(fti_quantile)
-df['Signal'] = (df['FTI'] > fti_threshold) & (df['VIX'] > vix_threshold)
-df['Market_Ret'] = df['SPY'].pct_change()
-df['Strat_Ret'] = np.where(df['Signal'].shift(1), 0, df['Market_Ret'])
+# Merge and clean
+df = pd.DataFrame({'FTI': fti_series, 'VIX': vix, 'SPY': data['SPY']}).dropna()
+threshold = df['FTI'].quantile(fti_quantile)
 
-def get_max_drawdown(returns):
-    cum_rets = (1 + returns.fillna(0)).cumprod()
-    peak = cum_rets.cummax()
-    return (cum_rets - peak) / peak
+# --- Signals & Performance ---
+df['Signal'] = (df['FTI'] > threshold) & (df['VIX'] > vix_threshold)
+df['Mkt_Ret'] = df['SPY'].pct_change()
+df['Strat_Ret'] = np.where(df['Signal'].shift(1), 0, df['Mkt_Ret'])
 
-df['Market_DD'] = get_max_drawdown(df['Market_Ret'])
-df['Strat_DD'] = get_max_drawdown(df['Strat_Ret'])
+# Drawdowns
+def calc_dd(rets):
+    cum = (1 + rets.fillna(0)).cumprod()
+    return (cum - cum.cummax()) / cum.cummax()
 
-# --- UI Layout ---
-st.title("🛡️ Adaptive Dual-Key Market Stress")
+df['Mkt_DD'] = calc_dd(df['Mkt_Ret'])
+df['Strat_DD'] = calc_dd(df['Strat_Ret'])
 
-# Performance Metrics
-m1, m2, m3 = st.columns(3)
-with m1:
-    total_mkt = (1 + df['Market_Ret'].dropna()).prod() - 1
-    st.metric("SPY Total Return", f"{total_mkt:.2%}")
-with m2:
-    total_strat = (1 + df['Strat_Ret'].dropna()).prod() - 1
-    st.metric("Strategy Return", f"{total_strat:.2%}", delta=f"{(total_strat - total_mkt):.2%}")
-with m3:
-    st.metric("Strategy Max DD", f"{df['Strat_DD'].min():.2%}", delta=f"{(df['Strat_DD'].min() - df['Market_DD'].min()):.2%}", delta_color="inverse")
+# --- UI ---
+st.title("🛡️ Market Turbulence Dashboard")
 
-# Charts
-st.subheader("1. Equity Curve (Log Scale Available)")
-fig_perf = go.Figure()
-fig_perf.add_trace(go.Scatter(x=df.index, y=(1+df['Market_Ret'].fillna(0)).cumprod(), name="SPY", line=dict(color='gray')))
-fig_perf.add_trace(go.Scatter(x=df.index, y=(1+df['Strat_Ret'].fillna(0)).cumprod(), name="Filtered Strategy", line=dict(color='orange', width=2)))
-st.plotly_chart(fig_perf, use_container_width=True)
+c1, c2, c3 = st.columns(3)
+m_ret = (1 + df['Mkt_Ret']).prod() - 1
+s_ret = (1 + df['Strat_Ret']).prod() - 1
+c1.metric("SPY Return", f"{m_ret:.1%}")
+c2.metric("Strat Return", f"{s_ret:.1%}", f"{s_ret-m_ret:.1%}")
+c3.metric("Strat Max DD", f"{df['Strat_DD'].min():.1%}")
 
-st.subheader("2. Regime Analysis: The Danger Zone")
+st.subheader("Equity Curve")
+fig = go.Figure()
+fig.add_trace(go.Scatter(x=df.index, y=(1+df['Mkt_Ret']).cumprod(), name="SPY", line=dict(color='gray')))
+fig.add_trace(go.Scatter(x=df.index, y=(1+df['Strat_Ret']).cumprod(), name="Strategy", line=dict(color='orange')))
+st.plotly_chart(fig, use_container_width=True)
+
+st.subheader("Danger Zone Analysis")
 df['Regime'] = "Normal"
-df.loc[df['FTI'] > fti_threshold, 'Regime'] = "Structural Stress"
-df.loc[df['VIX'] > vix_threshold, 'Regime'] = "Market Fear"
 df.loc[df['Signal'], 'Regime'] = "CRASH WARNING"
-
-fig_scatter = px.scatter(df, x='FTI', y='VIX', color='Regime', 
-                         color_discrete_map={"Normal": "gray", "Structural Stress": "blue", 
-                                             "Market Fear": "purple", "CRASH WARNING": "red"})
-st.plotly_chart(fig_scatter, use_container_width=True)
+fig_scat = px.scatter(df, x='FTI', y='VIX', color='Regime', color_discrete_map={"Normal":"gray", "CRASH WARNING":"red"})
+st.plotly_chart(fig_scat, use_container_width=True)
