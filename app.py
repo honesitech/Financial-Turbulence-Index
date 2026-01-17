@@ -2,185 +2,113 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 from scipy.spatial.distance import mahalanobis
+from datetime import datetime, timedelta
 
 # --- App Configuration ---
-st.set_page_config(page_title="Turbulence Regime Monitor", layout="wide")
-st.title("🛡️ Mahalanobis Turbulence Dashboard")
+st.set_page_config(page_title="Professional Turbulence Monitor", layout="wide")
+
+# --- Asset Universe (Optimized Global 50) ---
+# Removed redundancy (IVV, VOO) to improve mathematical stability
+tickers = [
+    "SPY", "QQQ", "IWM", "XLK", "XLF", "XLE", "XLV", "XLI", "XLY", "XLP", "XLB", "XLU", "XLRE",
+    "EFA", "VWO", "EWJ", "EWZ", "MCHI", "INDA", "FXI", "KRE", "XBI", "SMH", "ITA",
+    "AGG", "TLT", "IEF", "SHY", "LQD", "HYG", "BNDX", "EMB", "TIP", "MUB", "JNK",
+    "GLD", "SLV", "USO", "UNG", "DBA", "DBC", "CPER", "PALL", "VNQ", "UUP", "FXE", "FXY", 
+    "BTC-USD", "ETH-USD", "IAU"
+]
 
 # --- Sidebar Inputs ---
-st.sidebar.header("Parameters")
-
-# 1. Flexible Lookback: 2 to 20 years
-years_numeric = np.arange(2, 20.5, 0.5)
-lookback_options = [f"{y} years" for y in years_numeric]
-selected_label = st.sidebar.selectbox("Lookback Period", lookback_options, index=0) 
-
-years_val = float(selected_label.split()[0])
-lookback_period = f"{int(years_val * 365)}d" if years_val < 1.0 else f"{int(years_val)}y"
-
-# 2. Window with user input
-user_window = st.sidebar.slider("FTI Rolling Window (Days)", 60, 500, 252)
-
-# --- Asset Universe ---
-etf_tickers = [
-    'SPY', 'IVV', 'VOO', 'QQQ', 'DIA', 'IWM', 'VWO', 'EEM', 'GLD', 'SLV',
-    'USO', 'UNG', 'XLK', 'XLF', 'XLC', 'XLY', 'XLP', 'XLE', 'XLV', 'XLI',
-    'XLB', 'XLU', 'SMH', 'SOXX', 'KWEB', 'ARKK', 'VGT', 'VNQ', 'RWR', 'IYR',
-    'GDX', 'GDXJ', 'XOP', 'OIH', 'KRE', 'XHB', 'ITB', 'IGV', 'SKYY', 'FDN',
-    'VUG', 'VTV', 'BND', 'AGG', 'LQD', 'JNK', 'HYG', 'TLT', 'IEI', 'SHY'
-]
+st.sidebar.header("🕹️ Controls")
+lookback_years = st.sidebar.slider("Lookback Years", 2, 10, 5)
+user_window = st.sidebar.slider("Rolling Window (Days)", 60, 500, 252)
 
 # --- Data Engine ---
 @st.cache_data(ttl=3600)
-def get_data(tickers, period):
-    # Fetching ETFs + S&P 500 Index (^GSPC)
-    data = yf.download(tickers + ['^GSPC'], period=period)
-    prices = data.xs('Close', level=0, axis=1).dropna()
-    return prices
+def get_market_data(tickers, years):
+    start_date = datetime.now() - timedelta(days=years*365)
+    data = yf.download(tickers, start=start_date)['Close']
+    # If any tickers failed, remove them to avoid math errors
+    data = data.dropna(axis=1, how='all').ffill().dropna()
+    return data
 
-with st.spinner("Analyzing Market Structure..."):
-    all_prices = get_data(etf_tickers, lookback_period)
-    returns = all_prices[etf_tickers].pct_change().dropna()
+with st.spinner("Synchronizing Global Markets..."):
+    prices = get_market_data(tickers, lookback_years)
+    returns = prices.pct_change().dropna()
+
+# --- Turbulence Engine (Mahalanobis Distance) ---
+def calculate_turbulence(ret_df, window):
+    # Using the pseudo-inverse (pinv) prevents the app from crashing 
+    # if two assets become perfectly correlated during a crash.
+    turb_results = []
+    dates = ret_df.index[window:]
     
-    # SAFETY: Adjust window if lookback is too short
-    data_length = len(returns)
-    if user_window >= data_length:
-        active_window = max(10, int(data_length * 0.75))
-        st.sidebar.warning(f"⚠️ Window adjusted to {active_window} for short lookback.")
+    for i in range(window, len(ret_df)):
+        history = ret_df.iloc[i-window : i]
+        mu = history.mean().values
+        inv_cov = np.linalg.pinv(history.cov().values)
+        y_t = ret_df.iloc[i].values
+        
+        # Mahalanobis Distance Squared
+        d_t = mahalanobis(y_t, mu, inv_cov) ** 2
+        turb_results.append(d_t)
+        
+    return pd.Series(turb_results, index=dates)
+
+fti_raw = calculate_turbulence(returns, user_window)
+# Convert to Percentile Rank (0-100) for UX clarity
+fti_percentile = fti_raw.rank(pct=True) * 100
+current_score = fti_percentile.iloc[-1]
+
+# --- UI: Risk Gauge ---
+st.title("🌪️ Financial Turbulence Index")
+
+col1, col2 = st.columns([1, 2])
+
+with col1:
+    fig_gauge = go.Figure(go.Indicator(
+        mode = "gauge+number",
+        value = current_score,
+        title = {'text': "Current Risk Percentile"},
+        gauge = {
+            'axis': {'range': [0, 100]},
+            'bar': {'color': "black"},
+            'steps': [
+                {'range': [0, 70], 'color': "lightgreen"},
+                {'range': [70, 90], 'color': "orange"},
+                {'range': [90, 100], 'color': "red"}
+            ],
+        }
+    ))
+    fig_gauge.update_layout(height=350, margin=dict(l=20, r=20, t=50, b=20))
+    st.plotly_chart(fig_gauge, use_container_width=True)
+
+with col2:
+    st.markdown("### Market Regime Summary")
+    if current_score > 90:
+        st.error(f"**CRITICAL STRESS ({current_score:.1f}%)**: Asset correlations are breaking down. This is typical of systemic shocks.")
+    elif current_score > 70:
+        st.warning(f"**ELEVATED TURBULENCE ({current_score:.1f}%)**: Unusual market activity. Diversification may be less effective.")
     else:
-        active_window = user_window
+        st.success(f"**NORMAL REGIME ({current_score:.1f}%)**: Market interactions are within historical norms.")
 
-# --- Turbulence Calculation (Mahalanobis Distance) ---
-def run_analysis(ret_df, win):
-    mu = ret_df.rolling(window=win).mean()
-    cov = ret_df.rolling(window=win).cov()
-    results = []
-    valid_dates = ret_df.index[win:]
-    
-    prog = st.progress(0)
-    for i, date in enumerate(valid_dates):
-        x = ret_df.loc[date].values
-        m = mu.loc[date].values
-        S = cov.loc[date].values
-        # Stability regularization
-        S_inv = np.linalg.inv(S + np.eye(len(etf_tickers)) * 1e-6)
-        results.append(mahalanobis(x, m, S_inv))
-        if i % 100 == 0:
-            prog.progress(i / len(valid_dates))
-            
-    prog.empty()
-    return pd.Series(results, index=valid_dates)
+# --- Interactive Main Chart ---
+st.subheader("📈 FTI Percentile vs. S&P 500")
+bench_price = prices['SPY'].reindex(fti_percentile.index)
 
-fti = run_analysis(returns, active_window)
+fig_main = go.Figure()
+# S&P 500 Price (Primary Axis)
+fig_main.add_trace(go.Scatter(x=bench_price.index, y=bench_price, name="S&P 500 (SPY)", line=dict(color='gray', width=1.5), opacity=0.4))
+# FTI (Secondary Axis)
+fig_main.add_trace(go.Scatter(x=fti_percentile.index, y=fti_percentile, name="Turbulence %", line=dict(color='red', width=2), yaxis="y2"))
 
-if fti.empty:
-    st.error("Insufficient data. Please increase Lookback Period.")
-    st.stop()
-
-sp500_index = all_prices['^GSPC'].reindex(fti.index)
-
-# --- Percentile & Signal Logic ---
-threshold_90 = fti.quantile(0.90)
-fti_latest = fti.iloc[-1]
-fti_percentile = fti.rank(pct=True).iloc[-1] * 100
-
-# --- UI: Top Metrics ---
-col1, col2, col3 = st.columns([1, 1, 2])
-col1.metric("Latest FTI", f"{fti_latest:.2f}")
-col2.metric("FTI Percentile", f"{fti_percentile:.1f}%")
-
-with col3:
-    if fti_latest >= threshold_90:
-        st.error("🚨 HIGH TURBULENCE REGIME: Structural Outlier Detected")
-    else:
-        st.success("✅ STABLE REGIME: Asset Correlations Normal")
-
-# --- Integrated Visualizer ---
-st.subheader("📈 S&P 500 Index & Structural Stress Overlay")
-
-fig, ax_main = plt.subplots(figsize=(12, 7))
-
-# S&P 500 Index (Left Y)
-ax_main.plot(sp500_index.index, sp500_index, color='#2c3e50', alpha=0.6, label='S&P 500 Index')
-ax_main.set_ylabel('S&P 500 Level', color='#2c3e50', fontweight='bold')
-ax_main.grid(alpha=0.1)
-
-# FTI (Right Y)
-ax_fti = ax_main.twinx()
-ax_fti.plot(fti.index, fti, color='red', alpha=0.8, label='FTI (Stress)', linewidth=1.2)
-ax_fti.axhline(threshold_90, color='red', linestyle=':', alpha=0.5, label='90th Percentile')
-ax_fti.set_ylabel('Turbulence (FTI)', color='red', fontweight='bold')
-
-# Danger Zone Highlight
-danger_mask = (fti >= threshold_90)
-ax_main.fill_between(fti.index, sp500_index.min(), sp500_index.max(), where=danger_mask, 
-                     color='red', alpha=0.1, label='Turbulent Period')
-
-plt.title("Price Action vs. Mahalanobis Stress")
-ax_main.legend(loc='upper left')
-fig.tight_layout()
-st.pyplot(fig)
-
-# --- Performance Logic ---
-st.divider()
-st.subheader("📊 Performance: Turbulence-Aware Strategy")
-sp_returns = sp500_index.pct_change()
-
-# Strategy: Exit Market if FTI > 90th percentile
-signal = (fti < threshold_90).astype(int).shift(1)
-
-strat_cum = (1 + (sp_returns * signal)).cumprod()
-mkt_cum = (1 + sp_returns).cumprod()
-
-fig_perf, ax_p = plt.subplots(figsize=(10, 4))
-ax_p.plot(mkt_cum.index, mkt_cum, label="Buy & Hold S&P 500", alpha=0.4, linestyle='--')
-ax_p.plot(strat_cum.index, strat_cum, label="FTI Timing Strategy", color='green', linewidth=2)
-ax_p.set_ylabel("Portfolio Growth")
-ax_p.legend()
-st.pyplot(fig_perf)
-# --- Asset Health Monitor in Sidebar ---
-st.sidebar.divider()
-st.sidebar.subheader("📊 Asset Health Monitor")
-
-# Count assets that successfully downloaded
-downloaded_count = len(all_prices.columns) - 1  # Subtracting 1 for ^GSPC
-expected_count = len(etf_tickers)
-
-if downloaded_count == expected_count:
-    st.sidebar.success(f"All {downloaded_count} Assets Active")
-else:
-    st.sidebar.warning(f"Processing {downloaded_count}/{expected_count} Assets")
-    missing = set(etf_tickers) - set(all_prices.columns)
-    if missing:
-        st.sidebar.write(f"Missing: {', '.join(missing)}")
-
-# Show Data Density
-st.sidebar.caption(f"Total Data Points: {len(returns):,}")
-
-# --- Documentation ---
-with st.expander("📖 Documentation: Understanding the Turbulence Index"):
-    st.write(f"""
-   
-    ### Mahalanobis Distance (FTI)
-    The FTI uses the **Mahalanobis Distance** to measure the relationship between 50 diverse ETFs statistically. 
-
-    ### 90th Percentile Threshold
-    The red shading highlights the top **10%** of most unusual days.
-
-    ### 3. Asset Universe (50 ETFs Used)
-    The FTI monitors systemic stress across these key categories:
-    * **Broad US Indices**: SPY, IVV, VOO, QQQ, DIA, IWM
-    * **Sectors (SPDRs)**: XLK, XLF, XLC, XLY, XLP, XLE, XLV, XLI, XLB, XLU
-    * **Global & Emerging**: VWO, EEM, KWEB
-    * **Commodities**: GLD, SLV, USO, UNG, GDX, GDXJ
-    * **Fixed Income**: BND, AGG, LQD, JNK, HYG, TLT, IEI, SHY
-    * **Thematic & Factors**: SMH, SOXX, ARKK, VGT, VNQ, RWR, IYR, XOP, OIH, KRE, XHB, ITB, IGV, SKYY, FDN, VUG, VTV.
-    """)
-
-
-
-
+fig_main.update_layout(
+    template="plotly_dark",
+    yaxis=dict(title="S&P 500 Price"),
+    yaxis2=dict(title="Turbulence Percentile", overlaying="y", side="right", range=[0, 100]),
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+)
+st.plotly_chart(fig_main, use_container_width=True)
 
 
