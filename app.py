@@ -176,4 +176,3 @@ Global & Emerging,"VWO, EEM, KWEB"
 Commodities,"GLD, SLV, USO, UNG, GDX, GDXJ"
 Fixed Income,"BND, AGG, LQD, JNK, HYG, TLT, IEI, SHY"
 Thematic & Factors,"SMH, SOXX, ARKK, VGT, VNQ, RWR, IYR, XOP, OIH, KRE, XHB, ITB, IGV, SKYY, FDN, VUG, VTV".)
-
