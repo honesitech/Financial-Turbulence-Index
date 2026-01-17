@@ -52,15 +52,11 @@ user_window = st.sidebar.slider("FTI Rolling Window (Days)", 60, 500, 252)
 
 etf_tickers = [
 
-    'SPY', 'IVV', 'VOO', 'QQQ', 'DIA', 'IWM', 'VWO', 'EEM', 'GLD', 'SLV',
-
-    'USO', 'UNG', 'XLK', 'XLF', 'XLC', 'XLY', 'XLP', 'XLE', 'XLV', 'XLI',
-
-    'XLB', 'XLU', 'SMH', 'SOXX', 'KWEB', 'ARKK', 'VGT', 'VNQ', 'RWR', 'IYR',
-
-    'GDX', 'GDXJ', 'XOP', 'OIH', 'KRE', 'XHB', 'ITB', 'IGV', 'SKYY', 'FDN',
-
-    'VUG', 'VTV', 'BND', 'AGG', 'LQD', 'JNK', 'HYG', 'TLT', 'IEI', 'SHY'
+    "SPY", "QQQ", "IWM", "XLK", "XLF", "XLE", "XLV", "XLI", "XLY", "XLP", "XLB", "XLU", "XLRE",
+    "EFA", "VWO", "EWJ", "EWZ", "MCHI", "INDA", "FXI", "KRE", "XBI", "SMH", "ITA",
+    "AGG", "TLT", "IEF", "SHY", "LQD", "HYG", "BNDX", "EMB", "TIP", "MUB", "JNK",
+    "GLD", "SLV", "USO", "UNG", "DBA", "DBC", "CPER", "PALL", "VNQ", "UUP", "FXE", "FXY", 
+    "BTC-USD", "ETH-USD", "IAU"
 
 ]
 
@@ -340,21 +336,16 @@ with st.expander("📖 Documentation: Understanding the Turbulence Index"):
 
 
 
-    ### 3. Asset Universe (50 ETFs Used)
-
+### 3. Asset Universe (50 ETFs Used)
+                
     The FTI monitors systemic stress across these key categories:
 
-    * **Broad US Indices**: SPY, IVV, VOO, QQQ, DIA, IWM
-
-    * **Sectors (SPDRs)**: XLK, XLF, XLC, XLY, XLP, XLE, XLV, XLI, XLB, XLU
-
-    * **Global & Emerging**: VWO, EEM, KWEB
-
-    * **Commodities**: GLD, SLV, USO, UNG, GDX, GDXJ
-
-    * **Fixed Income**: BND, AGG, LQD, JNK, HYG, TLT, IEI, SHY
-
-    * **Thematic & Factors**: SMH, SOXX, ARKK, VGT, VNQ, RWR, IYR, XOP, OIH, KRE, XHB, ITB, IGV, SKYY, FDN, VUG, VTV.
-
+    * **Broad US Indices**: SPY, VUG, QQQ, DIA, IWM, VTV
+    * **Sectors (SPDRs)**: XLK, XLF, XLC, XLY, XLP, XLE, XLV, XLI, XLB, XLU, XLRE
+    * **Global & Emerging**: EFA, VWO, EWJ, EWZ, MCHI, INDA, FXI, KWEB
+    * **Commodities & Industry**: GLD, SLV, USO, UNG, GDX, GDXJ, SMH, KRE, XBI, ITA, XHB, XOP
+    * **Fixed Income**: BND, AGG, LQD, JNK, HYG, TLT, IEF, SHY, EMB, TIP
+    * **Thematic & Factors**: VNQ, ARKK, VGT, UUP, BTC-USD, ETH-USD
     """)
+
 
