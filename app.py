@@ -140,6 +140,24 @@ ax_p.plot(strat_cum.index, strat_cum, label="FTI Timing Strategy", color='green'
 ax_p.set_ylabel("Portfolio Growth")
 ax_p.legend()
 st.pyplot(fig_perf)
+# --- Asset Health Monitor in Sidebar ---
+st.sidebar.divider()
+st.sidebar.subheader("📊 Asset Health Monitor")
+
+# Count assets that successfully downloaded
+downloaded_count = len(all_prices.columns) - 1  # Subtracting 1 for ^GSPC
+expected_count = len(etf_tickers)
+
+if downloaded_count == expected_count:
+    st.sidebar.success(f"All {downloaded_count} Assets Active")
+else:
+    st.sidebar.warning(f"Processing {downloaded_count}/{expected_count} Assets")
+    missing = set(etf_tickers) - set(all_prices.columns)
+    if missing:
+        st.sidebar.write(f"Missing: {', '.join(missing)}")
+
+# Show Data Density
+st.sidebar.caption(f"Total Data Points: {len(returns):,}")
 
 # --- Documentation ---
 with st.expander("📖 Documentation: Understanding the Turbulence Index"):
@@ -160,6 +178,7 @@ with st.expander("📖 Documentation: Understanding the Turbulence Index"):
     * **Fixed Income**: BND, AGG, LQD, JNK, HYG, TLT, IEI, SHY
     * **Thematic & Factors**: SMH, SOXX, ARKK, VGT, VNQ, RWR, IYR, XOP, OIH, KRE, XHB, ITB, IGV, SKYY, FDN, VUG, VTV.
     """)
+
 
 
 
