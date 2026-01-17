@@ -51,17 +51,26 @@ user_window = st.sidebar.slider("FTI Rolling Window (Days)", 60, 500, 252)
 # --- Asset Universe ---
 
 etf_tickers = [
-
-    'SPY', 'IVV', 'VOO', 'QQQ', 'DIA', 'IWM', 'VWO', 'EEM', 'GLD', 'SLV',
-
-    'USO', 'UNG', 'XLK', 'XLF', 'XLC', 'XLY', 'XLP', 'XLE', 'XLV', 'XLI',
-
-    'XLB', 'XLU', 'SMH', 'SOXX', 'KWEB', 'ARKK', 'VGT', 'VNQ', 'RWR', 'IYR',
-
-    'GDX', 'GDXJ', 'XOP', 'OIH', 'KRE', 'XHB', 'ITB', 'IGV', 'SKYY', 'FDN',
-
-    'VUG', 'VTV', 'BND', 'AGG', 'LQD', 'JNK', 'HYG', 'TLT', 'IEI', 'SHY'
-
+    # 1. US Core & Styles (Broad Market Exposure)
+    'SPY', 'QQQ', 'IWM', 'VUG', 'VTV', 'DIA', 
+    
+    # 2. US Sectors (Cyclical & Defensive)
+    'XLK', 'XLF', 'XLE', 'XLV', 'XLI', 'XLY', 'XLP', 'XLB', 'XLU', 'XLRE',
+    
+    # 3. Specific Industries (High Sensitivity)
+    'SMH', 'KRE', 'XBI', 'ITA', 'XHB', 'XOP', 'GDX', 'ARKK',
+    
+    # 4. Global & Emerging Markets (Geopolitical Risk)
+    'EFA', 'VWO', 'EWJ', 'EWZ', 'MCHI', 'INDA', 'FXI', 'KWEB',
+    
+    # 5. Fixed Income & Credit (Liquidity Stress)
+    'AGG', 'TLT', 'IEF', 'SHY', 'LQD', 'HYG', 'BNDX', 'EMB', 'TIP', 'JNK',
+    
+    # 6. Commodities & Alternatives (Inflation/Safety)
+    'GLD', 'SLV', 'USO', 'UNG', 'DBA', 'CPER', 'VNQ', 'UUP',
+    
+    # 7. Digital Assets (Modern Systemic Risk)
+    'BTC-USD', 'ETH-USD'
 ]
 
 
@@ -357,3 +366,4 @@ with st.expander("📖 Documentation: Understanding the Turbulence Index"):
     * **Thematic & Factors**: SMH, SOXX, ARKK, VGT, VNQ, RWR, IYR, XOP, OIH, KRE, XHB, ITB, IGV, SKYY, FDN, VUG, VTV.
 
     """)
+
