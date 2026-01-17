@@ -144,15 +144,12 @@ st.pyplot(fig_perf)
 # --- Documentation ---
 with st.expander("📖 Documentation: Understanding the Turbulence Index"):
     st.write(f"""
-    ### What happened to the VIX?
-    This version removes VIX sentiment and relies purely on **market structure**. It assumes that extreme anomalies in how 50 assets move together are sufficient to signal risk.
-
+   
     ### Mahalanobis Distance (FTI)
-    The FTI uses the **Mahalanobis Distance** to identify days where the relationship between 50 diverse ETFs is statistically 'weird'. 
-    - **Value ~4**: Normal. Assets are moving according to their historical correlations.
-    - **Value ~12+**: Extreme. This indicates a breakdown in diversification (e.g., almost everything crashing at once), which historically precedes major drawdowns.
+    The FTI uses the **Mahalanobis Distance** to measure the relationship between 50 diverse ETFs is statistically. 
 
     ### 90th Percentile Threshold
-    The red shading highlights the top **10%** of most unusual days. When the FTI crosses this line, the strategy moves to cash to protect capital from systemic outliers.
+    The red shading highlights the top **10%** of most unusual days.
     """)
+
 
