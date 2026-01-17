@@ -15,7 +15,7 @@ st.sidebar.header("Parameters")
 # 1. Flexible Lookback: 2 to 20 years
 years_numeric = np.arange(2, 20.5, 0.5)
 lookback_options = [f"{y} years" for y in years_numeric]
-selected_label = st.sidebar.selectbox("Lookback Period", lookback_options, index=9) 
+selected_label = st.sidebar.selectbox("Lookback Period", lookback_options, index=0) 
 
 years_val = float(selected_label.split()[0])
 lookback_period = f"{int(years_val * 365)}d" if years_val < 1.0 else f"{int(years_val)}y"
@@ -160,6 +160,7 @@ with st.expander("📖 Documentation: Understanding the Turbulence Index"):
     * **Fixed Income**: BND, AGG, LQD, JNK, HYG, TLT, IEI, SHY
     * **Thematic & Factors**: SMH, SOXX, ARKK, VGT, VNQ, RWR, IYR, XOP, OIH, KRE, XHB, ITB, IGV, SKYY, FDN, VUG, VTV.
     """)
+
 
 
 
