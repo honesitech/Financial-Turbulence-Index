@@ -15,7 +15,8 @@ st.sidebar.header("Parameters")
 # 1. Flexible Lookback: 0.5 to 20 years in 0.5-year intervals
 years_numeric = np.arange(2, 20.5, 0.5)
 lookback_options = [f"{y} years" for y in years_numeric]
-selected_label = st.sidebar.selectbox("Lookback Period", lookback_options, index=9) # Default 5y
+# Defaulting to 5 years (index 9)
+selected_label = st.sidebar.selectbox("Lookback Period", lookback_options, index=9) 
 
 years_val = float(selected_label.split()[0])
 # Convert to yfinance format (e.g., '182d' or '5y')
@@ -29,7 +30,6 @@ st.sidebar.header("VIX Filter Settings")
 vix_threshold = st.sidebar.slider("VIX Fear Threshold", 15, 40, 25)
 
 # --- Asset Universe ---
-# 50 ETFs for structural calculation (Sectors, Global, Bonds, Commodities)
 etf_tickers = [
     'SPY', 'IVV', 'VOO', 'QQQ', 'DIA', 'IWM', 'VWO', 'EEM', 'GLD', 'SLV',
     'USO', 'UNG', 'XLK', 'XLF', 'XLC', 'XLY', 'XLP', 'XLE', 'XLV', 'XLI',
@@ -41,7 +41,6 @@ etf_tickers = [
 # --- Data Engine ---
 @st.cache_data(ttl=3600)
 def get_data(tickers, period):
-    # Fetching ETFs + VIX (^VIX) + The S&P 500 INDEX (^GSPC)
     data = yf.download(tickers + ['^VIX', '^GSPC'], period=period)
     prices = data.xs('Close', level=0, axis=1).dropna()
     return prices
@@ -60,13 +59,11 @@ with st.spinner("Analyzing Global Markets..."):
 
 # --- Turbulence Calculation (Mahalanobis Distance) ---
 def run_analysis(ret_df, win):
-    # Mahalanobis requires historical mean and covariance
     mu = ret_df.rolling(window=win).mean()
     cov = ret_df.rolling(window=win).cov()
     results = []
     valid_dates = ret_df.index[win:]
     
-    # Progress tracker
     prog = st.progress(0)
     for i, date in enumerate(valid_dates):
         x = ret_df.loc[date].values
@@ -83,19 +80,16 @@ def run_analysis(ret_df, win):
 
 fti = run_analysis(returns, active_window)
 
-# Guard Against Empty Results
 if fti.empty:
     st.error("Insufficient data for calculations. Increase Lookback or decrease Window.")
     st.stop()
 
-# Match dates across all series
 vix = all_prices['^VIX'].reindex(fti.index)
 sp500_index = all_prices['^GSPC'].reindex(fti.index)
 
 # --- Percentile & Strategy Logic ---
 threshold_90 = fti.quantile(0.90)
 fti_latest = fti.iloc[-1]
-# Calculate rank relative to the entire history shown
 fti_percentile = fti.rank(pct=True).iloc[-1] * 100
 
 # --- UI: Top Metrics ---
@@ -105,7 +99,6 @@ col2.metric("FTI Percentile", f"{fti_percentile:.1f}%")
 col3.metric("Current VIX", f"{vix.iloc[-1]:.1f}")
 
 with col4:
-    # Dual-Key logic: Move to cash only if FTI is extreme AND VIX is high
     if (fti_latest >= threshold_90) and (vix.iloc[-1] >= vix_threshold):
         st.error("🚨 DUAL-KEY ALARM: Systemic Stress & Panic")
     elif fti_latest >= threshold_90:
@@ -115,29 +108,22 @@ with col4:
 
 # --- Integrated Dashboard Chart ---
 st.subheader("📈 Integrated Market Stress Visualizer")
-
 fig, (ax_vix, ax_main) = plt.subplots(2, 1, figsize=(12, 10), sharex=True, 
                                       gridspec_kw={'height_ratios': [1, 2.5]})
 
-# 1. Top Subplot: VIX (Sentiment)
 ax_vix.plot(vix.index, vix, color='orange', alpha=0.8, label='VIX (Fear)')
 ax_vix.axhline(vix_threshold, color='orange', linestyle='--', alpha=0.5)
 ax_vix.set_ylabel('VIX', color='orange', fontweight='bold')
-ax_vix.grid(alpha=0.1)
 ax_vix.set_title("Market Fear Gauge (VIX)")
 
-# 2. Bottom Subplot: S&P 500 Index (Price - Axis 1)
 ax_main.plot(sp500_index.index, sp500_index, color='#2c3e50', alpha=0.6, label='S&P 500 Index')
-ax_main.set_ylabel('S&P 500 Index Level', color='#2c3e50', fontweight='bold')
+ax_main.set_ylabel('S&P 500 Level', color='#2c3e50', fontweight='bold')
 
-# 3. Bottom Subplot Overlay: FTI (Stress - Axis 2)
 ax_fti = ax_main.twinx()
 ax_fti.plot(fti.index, fti, color='red', alpha=0.8, label='FTI (Stress)', linewidth=1.2)
 ax_fti.axhline(threshold_90, color='red', linestyle=':', alpha=0.5, label='90th Percentile')
 ax_fti.set_ylabel('Turbulence (FTI)', color='red', fontweight='bold')
 
-# 4. Danger Zone Highlighting
-# Background turns red where the strategy would have exited the market
 danger_mask = (fti >= threshold_90) & (vix >= vix_threshold)
 ax_main.fill_between(fti.index, sp500_index.min(), sp500_index.max(), where=danger_mask, 
                      color='red', alpha=0.15, label='Dual-Key Warning')
@@ -150,7 +136,6 @@ st.pyplot(fig)
 st.divider()
 st.subheader("📊 Strategy Backtest: Growth of $1")
 sp_returns = sp500_index.pct_change()
-# Only "In Market" if Dual-Key condition is NOT met
 signal = ~((fti >= threshold_90) & (vix >= vix_threshold))
 signal = signal.astype(int).shift(1)
 
@@ -164,15 +149,23 @@ ax_p.set_ylabel("Portfolio Value")
 ax_p.legend()
 st.pyplot(fig_perf)
 
-# --- Documentation ---
-with st.expander("📖 Explanation of Metrics"):
+# --- Documentation Section ---
+with st.expander("📖 Documentation: Understanding the Strategy"):
     st.write(f"""
-    - **FTI Percentile ({fti_percentile:.1f}%)**: Today is more stressful than **{fti_percentile:.1f}%** of all days in the last {selected_label}.
-    - **Threshold (90th Pct)**: We flag the top **10%** of most 'unusual' days as Turbulent.
-    - **Assetts used to calculate FTI**: 
-Broad US Indices,"SPY, IVV, VOO, QQQ, DIA, IWM"
-Sectors (SPDRs),"XLK, XLF, XLC, XLY, XLP, XLE, XLV, XLI, XLB, XLU"
-Global & Emerging,"VWO, EEM, KWEB"
-Commodities,"GLD, SLV, USO, UNG, GDX, GDXJ"
-Fixed Income,"BND, AGG, LQD, JNK, HYG, TLT, IEI, SHY"
-Thematic & Factors,"SMH, SOXX, ARKK, VGT, VNQ, RWR, IYR, XOP, OIH, KRE, XHB, ITB, IGV, SKYY, FDN, VUG, VTV".)
+    ### 1. The Mahalanobis Distance (FTI)
+    The **Financial Turbulence Index (FTI)** is calculated using the **Mahalanobis Distance**. Unlike standard volatility, it measures how 'statistically unusual' today’s returns are compared to historical averages by looking at the interaction (correlations) of 50 different assets simultaneously. 
+    - A low FTI (~4) means the market is behaving normally. 
+    - A high FTI (~12+) signals a potential systemic breakdown or 'Black Swan' event.
+
+    ### 2. The 90th Percentile Threshold
+    The red dotted line on the chart represents the **90th percentile** of the FTI over your selected lookback. This means we only flag the top **10%** most stressful days as turbulent. This threshold is adaptive—it changes based on the period you view to capture only the most extreme relative outliers.
+
+    ### 3. Asset Universe (50 ETFs Used)
+    The FTI monitors systemic stress across these key categories:
+    * **Broad US Indices**: SPY, IVV, VOO, QQQ, DIA, IWM
+    * **Sectors (SPDRs)**: XLK, XLF, XLC, XLY, XLP, XLE, XLV, XLI, XLB, XLU
+    * **Global & Emerging**: VWO, EEM, KWEB
+    * **Commodities**: GLD, SLV, USO, UNG, GDX, GDXJ
+    * **Fixed Income**: BND, AGG, LQD, JNK, HYG, TLT, IEI, SHY
+    * **Thematic & Factors**: SMH, SOXX, ARKK, VGT, VNQ, RWR, IYR, XOP, OIH, KRE, XHB, ITB, IGV, SKYY, FDN, VUG, VTV
+    """)
